@@ -3,6 +3,7 @@ import argparse
 import io
 import re
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from playwright.sync_api import expect, sync_playwright
 from reportlab.pdfgen import canvas
@@ -36,8 +37,18 @@ def assert_neutral_text(page):
     expect(page.locator("body")).not_to_contain_text(TECHNICAL_LABELS, use_inner_text=True)
 
 
+def observe_external_requests(page, url):
+    unexpected = []
+    origin = urlsplit(url).netloc
+    page.on("request", lambda request: unexpected.append(request.url)
+            if urlsplit(request.url).scheme in {"http", "https"}
+            and urlsplit(request.url).netloc != origin else None)
+    return unexpected
+
+
 def check_configured_generation(browser, url):
     page = browser.new_page()
+    external_requests = observe_external_requests(page, url)
 
     def configured_settings(route):
         response = route.fetch()
@@ -61,7 +72,9 @@ def check_configured_generation(browser, url):
         "id": 1, "document_id": document_id, "material_type": "summary",
         "page_from": 1, "page_to": 5, "provider": "gemini", "model_used": "study-model-v1",
         "tokens_used": 180, "prompt_tokens": 100, "cost_usd": 0.000230,
-        "result": {"title": "Рельеф", "sections": [{"title": "Эрозия", "points": ["Реки переносят осадок."]}]},
+        "result": {"title": "Рельеф", "sections": [{"title": "Эрозия", "points": [
+            "Реки переносят осадок.", '<img src=x onerror="window.studyforgeAuditXss=true">',
+        ]}]},
     }
     job = {"status": "done", "generation": material}
     page.route("**/api/generations", lambda route: route.fulfill(
@@ -77,6 +90,9 @@ def check_configured_generation(browser, url):
     expect(page.get_by_role("heading", name="Рельеф")).to_be_visible()
     expect(page.locator(".material-head .badge")).to_have_text(["Конспект"])
     expect(page.locator(".material-head")).to_contain_text("180 токенов")
+    expect(page.locator(".summary-section")).to_contain_text('<img src=x onerror=')
+    assert page.locator(".summary-section img").count() == 0
+    assert page.evaluate("window.studyforgeAuditXss === undefined")
     assert_neutral_text(page)
 
     job = {"status": "error", "error_status": 429, "error": "Google Gemini study-model-v1: quota exceeded"}
@@ -90,17 +106,19 @@ def check_configured_generation(browser, url):
         assert_neutral_text(page)
     navigation.get_by_text("Настройки", exact=True).click()
     expect(page.get_by_text("текст выбранных страниц", exact=False)).to_contain_text("передаётся внешнему сервису")
+    assert not external_requests, external_requests
     page.close()
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--url", default="http://127.0.0.1:8000")
+    parser.add_argument("--url", default="http://127.0.0.1:8001")
     parser.add_argument("--screenshots", type=Path)
     args = parser.parse_args()
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch()
         page = browser.new_page(viewport={"width": 1440, "height": 1024})
+        external_requests = observe_external_requests(page, args.url)
         page.set_default_timeout(7000)
         page_errors = []
         console_errors = []
@@ -234,6 +252,7 @@ def main():
 
         assert not page_errors, page_errors
         assert not console_errors, console_errors
+        assert not external_requests, external_requests
         page.route("**/api/quota", lambda route: route.abort("internetdisconnected"))
         page.reload()
         expect(page.get_by_role("alert")).to_contain_text("Сервер недоступен")

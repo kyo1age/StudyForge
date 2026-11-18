@@ -3,6 +3,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from .config import settings
 from .db import init_db
@@ -11,6 +12,7 @@ from .schemas import SettingsOut
 from .services.llm.factory import get_llm
 from .services.llm.gemini_provider import configuration_error
 from .services.upload_limit import UploadBodyLimit
+from .security import SameOriginApi
 
 
 @asynccontextmanager
@@ -21,6 +23,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="StudyForge", version="2.1.0", lifespan=lifespan)
 app.add_middleware(UploadBodyLimit)
+app.add_middleware(SameOriginApi)
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "[::1]"], www_redirect=False)
 
 
 @app.get("/api/health")

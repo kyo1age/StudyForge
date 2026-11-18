@@ -1,107 +1,202 @@
 # StudyForge 2.1
 
-StudyForge превращает выбранные страницы PDF в конспекты, карточки и тесты. Приложение запускается локально и по умолчанию работает в **Mock Mode**. В этом режиме материалы строятся из текста загруженного файла по шаблонам, без обращения к AI-сервису.
+A local study workspace that turns PDF pages into summaries, flashcards, and interactive quizzes. StudyForge combines multilingual OCR, server-side Gemini integration, and a browser interface with local document and material history.
 
-- **Обзор** показывает последние документы, материалы, историю и счётчики из локальной базы.
-- **Документы** поддерживают выбор файла, drag & drop, прогресс загрузки, предпросмотр текста и удаление с подтверждением.
-- **AI Study** даёт выбрать диапазон страниц и формат. Задача выполняется в фоне, а результат сохраняется в истории с отметкой провайдера.
-- **Карточки** переворачиваются по нажатию или с клавиатуры. Можно отметить «Знаю» или «Повторить».
-- **Тесты** перемешивают варианты при каждом прохождении. Правильный ответ определяется по ID варианта. После завершения доступны процент и разбор.
-- **Настройки** показывают режим, ограничения загрузки и квоту. Тёмная тема включена по умолчанию. Выбранная тема запоминается в браузере.
+Built as a Python/FastAPI portfolio project and a local demonstration. The interface is in Russian. The default **Mock Mode** works without an API key or external AI requests.
 
-Стек — Python 3.12, FastAPI, SQLite, pypdf, HTML, CSS и Vanilla JavaScript. FastAPI обслуживает интерфейс и API на одном адресе. Inter и иконки Lucide поставляются локально. Node.js нужен только для тестов перемешивания.
+![StudyForge dashboard in local Mock Mode](docs/screenshots/01-dashboard.jpg)
 
-## Запуск в Windows PowerShell
+## Features
 
-Выполните команды в корне проекта. Нужен Python 3.12. Если launcher `py` недоступен, используйте `python` с установленным Python 3.12.
+- **PDF processing:** upload or drag and drop a PDF, preview extracted text by page, select a page range, and delete a document with its generated materials.
+- **Multilingual OCR:** recognize scanned pages in Kazakh, Russian, and English using local Tesseract models. Mixed PDFs retain page order and use OCR where the text layer is weak.
+- **AI-assisted summaries:** optionally send selected excerpts to Gemini and validate structured responses before saving. An OpenAI-compatible adapter is also available.
+- **Flashcards:** flip cards, navigate with keyboard controls, and mark cards for review during the current session.
+- **Interactive quizzes:** shuffled answers retain their correct-answer identity; results include a score and answer review. Gemini quiz results can include explanations and source-page references.
+- **Material history:** store documents, extracted text, summaries, cards, quizzes, and job state in SQLite. Cached results are scoped by document, page range, format, provider, and model.
+- **Usage and cost tracking:** weekly token accounting, available Gemini token metadata, and configurable daily Gemini attempt/budget controls. Displayed costs use configured prices and are estimates, not provider invoices.
 
-~~~powershell
+## Tech Stack
+
+| Area | Technologies |
+|---|---|
+| Backend | Python 3.12, FastAPI, Uvicorn, Pydantic |
+| Frontend | HTML, CSS, vanilla JavaScript, ES modules |
+| AI integration | Google Gen AI SDK, optional OpenAI-compatible adapter, HTTPX |
+| PDF and OCR | pypdf, pypdfium2/PDFium, tesserocr/Tesseract, Pillow |
+| Storage | SQLite and local PDF files |
+| Verification | pytest, Node.js built-in test runner, Playwright/Chromium |
+| UI assets | Bundled Inter fonts and Lucide icons |
+
+FastAPI serves the interface and API from the same origin. Generation jobs run in the application process with state recorded in SQLite. There is no separate frontend build step or JavaScript package installation.
+
+## Screenshots
+
+These are genuine captures of the running application using a synthetic educational PDF and local **Mock Mode**. They do not show live Gemini output or real user documents. JPEG images are optimized for repository viewing.
+
+| View | Screenshot |
+|---|---|
+| Main workspace | [Dashboard](docs/screenshots/01-dashboard.jpg) |
+| PDF library and upload | [Documents](docs/screenshots/02-documents.jpg) |
+| Generated summary | [Summary](docs/screenshots/03-summary.jpg) |
+| Flashcards | [Flashcards](docs/screenshots/04-flashcards.jpg) |
+| Interactive quiz | [Quiz](docs/screenshots/05-quiz.jpg) |
+
+### PDF library and upload
+
+![PDF library and upload area using a synthetic document](docs/screenshots/02-documents.jpg)
+
+### Summary
+
+![A summary produced by the local mock generator](docs/screenshots/03-summary.jpg)
+
+### Flashcards
+
+![Interactive flashcards produced in Mock Mode](docs/screenshots/04-flashcards.jpg)
+
+### Quiz
+
+![Interactive quiz with a selected answer in Mock Mode](docs/screenshots/05-quiz.jpg)
+
+## Installation
+
+Verified on **Windows x64 with Python 3.12**. Node.js is needed only for JavaScript tests; verification used Node.js 24. Other systems may require native Tesseract/Leptonica dependencies and have not been verified for this release.
+
+Run in PowerShell:
+
+```powershell
+git clone https://github.com/kyo1age/StudyForge.git
+Set-Location StudyForge
 py -3.12 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install --upgrade pip==26.2.0
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
-Copy-Item .env.example .env
-.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
-~~~
+if (!(Test-Path .env)) { Copy-Item .env.example .env }
+```
 
-Откройте [StudyForge](http://127.0.0.1:8000/) или [Swagger UI](http://127.0.0.1:8000/docs). Если файл `.env` уже существует, сохраните его и обновите только нужные значения вручную. Изменения конфигурации считываются при запуске.
+Keep an existing `.env` and edit only the settings you need. If `py` is unavailable, use a Python 3.12 `python` executable. The pip upgrade addresses known installer issues; application versions remain pinned in `requirements.txt`.
 
-В режиме `LLM_PROVIDER=openai` сервер использует `OPENAI_API_KEY`, `OPENAI_MODEL` и `OPENAI_BASE_URL`. Выбранный фрагмент текста отправляется настроенному провайдеру, а запросы могут быть платными. Если ключ пуст, сервер выбирает Mock Mode и сообщает об этом интерфейсу. Ключ не передаётся в браузер.
+### OCR language models
 
-## Подключение внешнего AI-провайдера
+The Windows x64 tesserocr wheel used for verification includes Tesseract; a separate `tesseract.exe` is not required by this application. OCR also needs `kaz.traineddata`, `rus.traineddata`, and `eng.traineddata`.
 
-При активном AI-режиме текст выбранных страниц (до 24 000 символов) передаётся стороннему провайдеру: Google или OpenAI, в зависимости от конфигурации. Полный PDF для генерации не отправляется. В Mock Mode внешние вызовы не выполняются. Условия обработки и хранения переданных данных определяются провайдером и вашим планом; перед отправкой ознакомьтесь с [условиями API Google](https://ai.google.dev/terms), [политикой конфиденциальности Google](https://policies.google.com/privacy) или соответствующими условиями настроенного провайдера.
+Download the models from the official Tesseract repository without overwriting existing files:
 
-Технические имена параметров, моделей и URL ниже сохранены для совместимости с API.
-
-Для включения провайдера Google укажите `LLM_PROVIDER=gemini`, заполните `GEMINI_API_KEY` в серверном `.env` и перезапустите приложение. `GEMINI_MODEL` по умолчанию равен `gemini-3.5-flash-lite`. Для другой модели укажите опубликованный идентификатор с поддержкой структурированного вывода и доступом для вашего ключа.
-
-Заполните `GEMINI_INPUT_PRICE_PER_1M` и `GEMINI_OUTPUT_PRICE_PER_1M` положительными тарифами в USD за миллион токенов. Проверьте [тарифы Google](https://ai.google.dev/gemini-api/docs/pricing) для модели и вашего плана. Без ключа или корректных параметров включится явно обозначенный Mock Mode. Ошибки уже активного AI-провайдера отображаются в интерфейсе.
-
-- `GEMINI_DAILY_REQUEST_LIMIT` и `GEMINI_DAILY_BUDGET_USD` по умолчанию ограничивают все сессии приложения 30 попытками и оценкой $2 за календарные сутки UTC. Значение 0 останавливает вызовы. Каждая попытка, включая повтор после временной ошибки, резервируется в SQLite до отправки запроса. При наличии метрик резерв уточняется с учётом входных, выходных и reasoning-токенов. При таймауте или отсутствии метрик консервативная оценка остаётся в дневном бюджете. Удаление PDF и перезапуск не сбрасывают счётчик.
-- Бюджет приложения зависит от введённых тарифов и оценки до вызова. Фактическое списание определяет Google. Показанная сумма отражает попытку, которая вернула материал, и не является счётом провайдера. Журнал бюджета также учитывает неудачные попытки. Инструменты поиска модели не включены.
-- Провайдер получает только текст выбранных страниц с исходными номерами, до 24 000 символов. Ответ проходит проверку структуры и повторов. Для карточек и тестов проверяются номера страниц, в разборе теста видны пояснения. Фактологическую точность ответа всё равно следует сверять с PDF.
-- `POST /api/generations` сохраняет асинхронный контракт. Если дневной лимит не пропускает вызов, задача получает `status: "error"` и `error_status: 429` в `GET /api/jobs/{job_id}`. На временные сетевые ошибки и HTTP 429/500/502/503/504 разрешена одна повторная попытка. Таймаут SDK составляет 45 секунд на попытку.
-
-Данные по умолчанию хранятся в `data/`. Для работы с прежними документами остановите старый сервер и **скопируйте** каталог данных, включая `uploads/`, в отдельное место. Направьте `STUDYFORGE_DATA_DIR` на эту копию. При запуске сервер добавит поля схемы в копии базы. Доступ к прежним записям требует прежнего cookie `sf_client_id` в браузере. На чистой установке библиотека пуста.
-
-## OCR для сканированных PDF в Windows
-
-Установите Python-зависимости из `requirements.txt`. Колесо `tesserocr` для Windows x64 включает движок Tesseract. Для распознавания необходимо отдельно установить три модели языков. Выполните в корне проекта:
-
-~~~powershell
+```powershell
 New-Item -ItemType Directory -Force .\data\tessdata | Out-Null
 foreach ($lang in 'kaz', 'rus', 'eng') {
-    Invoke-WebRequest "https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/main/$lang.traineddata" -OutFile ".\data\tessdata\$lang.traineddata"
+    $modelPath = ".\data\tessdata\$lang.traineddata"
+    if (!(Test-Path $modelPath)) {
+        Invoke-WebRequest "https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/main/$lang.traineddata" -OutFile $modelPath
+    }
 }
-~~~
+```
 
-Если Tesseract уже установлен через [установщик UB Mannheim](https://github.com/UB-Mannheim/tesseract/wiki), добавьте недостающие модели в его папку `tessdata` и укажите её абсолютный путь в `.env`, например `OCR_TESSDATA_DIR=C:\Program Files\Tesseract-OCR\tessdata`. Перезапустите StudyForge. Папка должна содержать `kaz.traineddata`, `rus.traineddata` и `eng.traineddata`. Внешний `tesseract.exe` приложению не требуется.
+Alternatively, point `OCR_TESSDATA_DIR` at an existing compatible directory. Text-layer PDFs work without language models. A fully scanned PDF is rejected if OCR is unavailable; mixed documents can retain readable pages with a warning.
 
-Во время загрузки StudyForge сначала читает текст через pypdf. Если в тексте страницы меньше 20 букв и цифр, приложение пробует OCR. Распознанный текст сохраняется в SQLite, поэтому просмотр и генерация материалов используют его без повторного OCR. Обычные PDF можно загружать и без моделей. При отсутствии моделей полностью отсканированный файл выдаст ошибку, а смешанный PDF сохранит доступный текст и покажет предупреждение.
+## Configuration
 
-Для теста реального OCR разместите модели в постоянном каталоге и задайте `$env:OCR_TESSDATA_DIR = (Resolve-Path .\data\tessdata).Path` перед запуском pytest. Иначе тест с реальным сканом пропускается.
+Settings load at startup from environment variables and the project-root `.env`. Existing environment variables take precedence. Restart after configuration changes. Credentials stay on the server; `.env` is ignored by Git.
 
-## Проверки
+| Variable | Purpose / default |
+|---|---|
+| `LLM_PROVIDER` | `mock` by default; optionally `gemini` or `openai` |
+| `GEMINI_API_KEY` | Server-side key; empty in `.env.example` |
+| `GEMINI_MODEL` | Repository default `gemini-3.5-flash-lite`; live access depends on the provider |
+| `GEMINI_INPUT_PRICE_PER_1M` | Positive input price in USD per million tokens; required for Gemini |
+| `GEMINI_OUTPUT_PRICE_PER_1M` | Positive output price in USD per million tokens; required for Gemini |
+| `GEMINI_DAILY_REQUEST_LIMIT` | Global Gemini attempts per UTC day; default `30` |
+| `GEMINI_DAILY_BUDGET_USD` | Global estimated Gemini budget per UTC day; default `2.00` |
+| `OPENAI_API_KEY` | Server-side key for the optional OpenAI-compatible adapter |
+| `OPENAI_BASE_URL` | Default `https://api.openai.com/v1` |
+| `OPENAI_MODEL` | Default `gpt-4o-mini` for the optional adapter |
+| `WEEKLY_TOKEN_LIMIT` | Per-client weekly allowance; default `100000` |
+| `MAX_UPLOAD_MB` | PDF size limit; default `20` |
+| `MAX_PAGES_PER_GENERATION` | Selected page-range limit; default `60` |
+| `STUDYFORGE_DATA_DIR` | Database/upload root; defaults to project `data/` |
+| `OCR_TESSDATA_DIR` | Defaults to the data root's `tessdata/` directory |
+| `COOKIE_SECURE` | `false` for local HTTP; `true` requires HTTPS |
 
-~~~powershell
+To enable Gemini, edit the existing server-side `.env`:
+
+```dotenv
+LLM_PROVIDER=gemini
+GEMINI_API_KEY=your_key_here
+GEMINI_MODEL=gemini-3.5-flash-lite
+GEMINI_INPUT_PRICE_PER_1M=
+GEMINI_OUTPUT_PRICE_PER_1M=
+```
+
+Replace the key placeholder and fill both prices using the [current provider pricing](https://ai.google.dev/gemini-api/docs/pricing) for your model and plan. Missing keys or invalid budget/model settings select Mock Mode with a configuration reason. An active provider failure becomes a failed job rather than a successful mock result.
+
+Every Gemini attempt, including a retry, reserves estimated budget before transmission. Available token metadata settles it; conservative reservations remain after timeouts or missing metadata. A zero daily request/budget limit blocks calls. Controls depend on configured prices and are not a provider-enforced billing cap. Deleting documents or restarting does not clear the daily ledger. The OpenAI-compatible adapter does not use the Gemini-specific dollar-budget ledger.
+
+## Running the Application
+
+```powershell
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8001
+```
+
+Open [http://127.0.0.1:8001/](http://127.0.0.1:8001/). API documentation: [http://127.0.0.1:8001/docs](http://127.0.0.1:8001/docs). Use **one worker**.
+
+For a separate demonstration library and no external AI calls, use a new PowerShell session:
+
+```powershell
+$env:LLM_PROVIDER = 'mock'
+$env:STUDYFORGE_DATA_DIR = Join-Path $env:TEMP ('studyforge-demo-' + [guid]::NewGuid())
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8001
+```
+
+Close that terminal after the demo to avoid reusing its environment overrides. To migrate an existing library, stop its server, back up/copy the complete data directory including uploads, and run against the copy. Startup may migrate its schema. Existing anonymous libraries also require the original browser cookie.
+
+## Tests
+
+```powershell
 .\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+$env:OCR_TESSDATA_DIR = (Resolve-Path .\data\tessdata).Path
 .\.venv\Scripts\python.exe -m pytest -q
 node --test tests/quiz.test.mjs
-~~~
+```
 
-Тесты Python используют отдельную временную SQLite. Старый `run_tests.py` по-прежнему запускает исходный набор. Запуск через pytest также включает новые проверки.
+Release verification on 18 November 2026: **51 Python tests passed, 0 failed; 5 JavaScript tests passed, 0 failed.** Real multilingual OCR ran with all three models. Without the models, that OCR test is skipped. Python tests use temporary databases; provider tests use mocked network transport. The legacy `run_tests.py` executes 14 tests already included in pytest.
 
-Для сквозной проверки запустите сервер с отдельным каталогом данных и без ключа. Выполните в другом PowerShell:
+### Browser smoke test
 
-~~~powershell
+Start a disposable Mock Mode server as above. In another terminal:
+
+```powershell
 .\.venv\Scripts\python.exe -m pip install playwright==1.65.2
 .\.venv\Scripts\python.exe -m playwright install chromium --only-shell
-.\.venv\Scripts\python.exe -m tests.browser_smoke --url http://127.0.0.1:8000
-~~~
+.\.venv\Scripts\python.exe -m tests.browser_smoke --url http://127.0.0.1:8001
+```
 
-Проверка Chromium загружает тестовые PDF, генерирует все три типа, проходит тест, открывает историю и удаляет созданный документ. Она также проверяет обе темы, четыре ширины окна и восстановление после сетевой ошибки. Опция `--screenshots test-artifacts` сохраняет снимки экрана.
+The Chromium workflow verifies uploads, invalid files, all material formats, caching, history/deletion, quiz scoring, privacy disclosure, literal rendering of document/AI HTML, network-error recovery, both themes, and four viewport widths. It checks for unexpected external requests from application pages. The release smoke test passed. No paid model calls were used.
 
-## Ограничения
+## Privacy
 
-- Лимиты PDF по умолчанию — 20 МБ на файл, 500 страниц, 2 млн извлечённых символов и 60 страниц на генерацию. OCR ограничен двумя одновременными документами, 30 страницами без достаточного текста, 15 секундами на страницу и 120 секундами на документ. Растр ограничен примерно 8 Мп и 4000 px по длинной стороне. Качество зависит от скана. Провайдеру передаются первые 24 000 символов выбранного фрагмента.
-- Генерации выполняются в процессе сервера. Запускайте один worker. При перезапуске незавершённые задачи получают ошибку, а сохранённые резервы квоты возвращаются. Квота основана на оценке до запроса и фактическом расходе после него, поэтому фактический расход может превысить порог.
-- Кеш учитывает документ, диапазон, формат, провайдер и модель. После смены модели прежний материал остаётся доступен в истории. Старые записи без метки сохраняются с подписью «Режим неизвестен».
-- Отметки на карточках и попытки прохождения теста живут в открытом материале. История хранит материалы, а не результаты прохождений. Счётчики на панели относятся к документам и созданным материалам.
-- Анонимная сессия привязана к cookie. Приложение рассчитано на локальный запуск. Общедоступная установка требует отдельной работы над авторизацией и контролем ресурсов.
-- Адаптеры OpenAI и Google проверены на HTTP-заглушках. Доступ к живым моделям, качество их ответов и выставление счетов не проверялись.
+- PDF text extraction and OCR run locally. In Mock Mode, generation also runs locally without sending text to an AI provider.
+- With Gemini or the OpenAI-compatible adapter enabled, up to **24,000 characters** from selected pages are sent to the external provider. Gemini includes page numbers. The adapters do not upload the full PDF. Selected text can contain personal information.
+- Provider processing/retention depends on the account plan and terms. Review the [Gemini API terms](https://ai.google.dev/terms), [Google privacy policy](https://policies.google.com/privacy), or the configured provider's terms before submitting sensitive content.
+- PDFs are stored locally; extracted/OCR text, materials, jobs, and usage are stored in SQLite. The application does not encrypt them at rest.
+- Document deletion removes its PDF, pages, materials, and jobs. Session records, weekly usage, and daily budgets remain. Deletion is not secure erasure of SQLite/WAL pages, backups, or provider submissions.
+- OCR temporary folders are removed after success or handled failure; crashes can leave temporary files. API responses use `Cache-Control: no-store`.
+- An HttpOnly/SameSite cookie identifies an anonymous library for up to five years. Possession grants access; losing it loses access to that library. Only the theme is stored in localStorage. Card marks and quiz attempts live in the open material rather than persistent progress records.
+- Main UI assets are local. FastAPI `/docs` and `/redoc` use default CDN assets; ReDoc also loads Google Fonts.
 
-Маршруты версии из снимка и изменения описаны в [AUDIT.md](AUDIT.md). Лицензии локальных ресурсов находятся в `app/static/vendor/`.
+## Limitations
 
-## Публикация на GitHub
+- **Local demonstration scope:** this is not a production-ready multi-user cloud service. Cookies are not account authentication. General request, storage, and new-session quotas are absent. Do not expose it through `0.0.0.0`, a public tunnel, or a reverse proxy as a finished hosted product.
+- Only `127.0.0.1`, `localhost`, and `[::1]` Hosts are accepted. Unsafe cross-origin API writes are rejected; CORS is not enabled. These measures support local use and do not replace authentication or abuse controls.
+- Default limits: 20 MB per PDF, 500 pages, 2 million extracted characters, and 60 selected pages per generation. OCR allows two concurrent documents, up to 30 weak-text pages, 15 seconds per page and 120 seconds per document; rasters are bounded to approximately 8 MP and 4000 pixels on the longer side.
+- Text-layer parsing runs in the API without a hard CPU/memory deadline. OCR subprocesses have timeouts but are not an OS sandbox and lack a hard memory quota. Process trusted documents locally; hostile-PDF handling needs stronger isolation/resource controls.
+- Jobs run in-process. Restarting interrupts unfinished jobs and refunds recorded weekly reservations. Actual usage can exceed estimates and the weekly threshold.
+- Mock Mode produces template-based demonstration material, not live Gemini output. AI answers can be inaccurate; verify facts and citations against the source.
+- History records materials, not long-term quiz scores or card-review progress. Counters describe stored documents/materials.
+- Live provider availability, quality, and billing were not tested for this release. Costs are estimates. Windows installation was verified; other platforms were not.
 
-Укажите лицензию проекта в `LICENSE` после согласования с правообладателем исходного кода. Для нового пустого репозитория выполните команды из корня проекта и проверьте состав первого коммита. `.env`, база и загруженные PDF исключены через `.gitignore`.
+The earlier [AUDIT.md](AUDIT.md) records historical implementation work. See the [Russian freelance portfolio entry](docs/portfolio/freelance-kz-studyforge.md) for a project presentation.
 
-~~~powershell
-git init -b main
-git add .
-git status --short
-git diff --cached --stat
-git commit -m "Rebuild StudyForge 2.0"
-git remote add origin https://github.com/USERNAME/studyforge.git
-git push -u origin main
-~~~
+## License
 
+No application license has been selected or added. The decision remains with the repository owner. The project is presented as portfolio source without an open-source licensing claim.
+
+Third-party asset licenses: [Inter](app/static/vendor/Inter-LICENSE.txt) and [Lucide](app/static/vendor/Lucide-LICENSE.txt).

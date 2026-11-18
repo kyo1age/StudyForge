@@ -10,7 +10,7 @@ from app.config import settings
 from app.db import init_db
 from app.main import app
 init_db()
-client=TestClient(app); client2=TestClient(app)
+client=TestClient(app, base_url="http://127.0.0.1"); client2=TestClient(app, base_url="http://127.0.0.1")
 
 def make_pdf(pages):
     buf=io.BytesIO(); c=canvas.Canvas(buf)

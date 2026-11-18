@@ -101,8 +101,9 @@ def run_job(job_id: str) -> None:
             _finish(conn, job_id, "done", generation_id=cursor.lastrowid, actual=response.tokens_used)
     except LlmError as exc:
         _fail(job_id, str(exc), exc.status_code)
-    except Exception:
-        logger.exception("Generation job %s failed", job_id)
+    except Exception as exc:
+        # Provider exception messages and tracebacks can contain source text or credentials.
+        logger.error("Generation job %s failed (%s)", job_id, type(exc).__name__)
         _fail(job_id, "Internal generation error. Try again or check the server log.")
 
 
