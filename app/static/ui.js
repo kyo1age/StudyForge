@@ -1,6 +1,6 @@
 const svgNS = 'http://www.w3.org/2000/svg';
 
-// Content from PDFs, API errors and AI is always inserted as text nodes.
+// Dynamic content is always inserted as text nodes.
 export function el(tag, attrs = {}, ...children) {
   const node = document.createElement(tag);
   for (const [name, value] of Object.entries(attrs)) {
@@ -75,12 +75,5 @@ export function openDialog(title, ...children) {
   );
   if (!dialog.open) dialog.showModal();
   return dialog;
-}
-
-export function modeBadge(provider, model) {
-  if (provider === 'mock') return badge('Mock Mode', 'mock');
-  if (provider === 'gemini') return badge('AI-провайдер', 'live');
-  if (provider === 'openai') return badge('OpenAI', 'live');
-  return badge('Режим неизвестен');
 }
 

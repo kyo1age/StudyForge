@@ -1,4 +1,4 @@
-"""Run against a local StudyForge server with a disposable database and Mock Mode."""
+"""Run against a local StudyForge server with a disposable database in demo mode."""
 import argparse
 import io
 import re
@@ -6,6 +6,10 @@ from pathlib import Path
 
 from playwright.sync_api import expect, sync_playwright
 from reportlab.pdfgen import canvas
+
+
+SECTIONS = ("Документы", "Генерация", "История", "Настройки", "Обзор")
+TECHNICAL_LABELS = re.compile(r"\b(?:AI|ИИ|LLM)\b|Gemini|Google|OpenAI|нейросет|study-model-v1", re.I)
 
 
 def fixture_pdf():
@@ -28,6 +32,67 @@ def assert_width(page):
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth"), page.url
 
 
+def assert_neutral_text(page):
+    expect(page.locator("body")).not_to_contain_text(TECHNICAL_LABELS, use_inner_text=True)
+
+
+def check_configured_generation(browser, url):
+    page = browser.new_page()
+
+    def configured_settings(route):
+        response = route.fetch()
+        route.fulfill(response=response, json={
+            **response.json(), "provider": "gemini", "configured_provider": "gemini",
+            "generation_mode": "gemini", "model_used": "study-model-v1",
+        })
+
+    page.route("**/api/settings", configured_settings)
+    page.goto(url)
+    navigation = page.locator("#navigation")
+    expect(page.get_by_role("heading", name="Обзор", exact=True)).to_be_visible()
+    expect(page.locator("#mode")).to_be_hidden()
+    navigation.get_by_text("Документы", exact=True).click()
+    page.locator('input[type=file]').set_input_files({
+        "name": "landscape-check.pdf", "mimeType": "application/pdf", "buffer": fixture_pdf(),
+    })
+    expect(page.get_by_role("button", name="Открыть landscape-check.pdf")).to_be_visible()
+    document_id = page.request.get(f"{url.rstrip('/')}/api/documents").json()[0]["id"]
+    material = {
+        "id": 1, "document_id": document_id, "material_type": "summary",
+        "page_from": 1, "page_to": 5, "provider": "gemini", "model_used": "study-model-v1",
+        "tokens_used": 180, "prompt_tokens": 100, "cost_usd": 0.000230,
+        "result": {"title": "Рельеф", "sections": [{"title": "Эрозия", "points": ["Реки переносят осадок."]}]},
+    }
+    job = {"status": "done", "generation": material}
+    page.route("**/api/generations", lambda route: route.fulfill(
+        status=201, json={"status": "accepted", "job_id": "test-generation"},
+    ))
+    page.route("**/api/jobs/test-generation", lambda route: route.fulfill(json=job))
+
+    navigation.get_by_text("Генерация", exact=True).click()
+    expect(page.get_by_role("heading", name="Генерация", exact=True)).to_be_visible()
+    expect(page.locator("main .notice")).to_have_count(0)
+    submit = page.get_by_role("button", name="Сгенерировать")
+    submit.click()
+    expect(page.get_by_role("heading", name="Рельеф")).to_be_visible()
+    expect(page.locator(".material-head .badge")).to_have_text(["Конспект"])
+    expect(page.locator(".material-head")).to_contain_text("180 токенов")
+    assert_neutral_text(page)
+
+    job = {"status": "error", "error_status": 429, "error": "Google Gemini study-model-v1: quota exceeded"}
+    submit.click()
+    expect(page.get_by_role("alert")).to_have_text("Генерация временно ограничена. Попробуйте позже.")
+    assert_neutral_text(page)
+
+    for name in SECTIONS:
+        navigation.get_by_text(name, exact=True).click()
+        expect(page.get_by_role("heading", name=name, exact=True, level=1)).to_be_visible()
+        assert_neutral_text(page)
+    navigation.get_by_text("Настройки", exact=True).click()
+    expect(page.get_by_text("текст выбранных страниц", exact=False)).to_contain_text("передаётся внешнему сервису")
+    page.close()
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--url", default="http://127.0.0.1:8000")
@@ -43,7 +108,7 @@ def main():
         page.on("console", lambda msg: console_errors.append(msg.text) if msg.type == "error" else None)
         page.goto(args.url)
         expect(page.get_by_role("heading", name="Обзор", exact=True)).to_be_visible()
-        expect(page.locator("#mode")).to_have_text("Mock Mode")
+        expect(page.locator("#mode")).to_have_text("Демо-режим")
         assert_width(page)
         page.keyboard.press("Tab")
         expect(page.get_by_role("link", name="К основному содержимому")).to_be_focused()
@@ -84,7 +149,8 @@ def main():
         dialog = page.get_by_role("dialog")
         expect(dialog.get_by_text("<b>Layers of sediment", exact=False)).to_be_visible()
         assert dialog.locator(".page-previews b").count() == 0
-        dialog.get_by_role("button", name="Использовать в AI Study").click()
+        dialog.get_by_role("button", name="Создать учебный материал").click()
+        expect(page.locator("main .notice")).to_have_count(0)
 
         page.locator("#to-page").fill("1")
         page.locator("#from-page").fill("2")
@@ -95,7 +161,10 @@ def main():
 
         page.get_by_role("button", name="Сгенерировать").click()
         expect(page.locator(".summary-section").first).to_be_visible()
-        expect(page.locator(".material .badge.mock")).to_have_text("Mock Mode")
+        expect(page.locator(".material-head .badge")).to_have_text(["Конспект"])
+        page.get_by_role("button", name="Сгенерировать").click()
+        expect(page.locator("#toasts")).to_have_text("Открыт сохранённый материал.")
+        expect(page.locator(".material-head .badge")).to_have_text(["Конспект"])
 
         page.get_by_role("radio", name=re.compile("Карточки")).check()
         page.get_by_role("button", name="Сгенерировать").click()
@@ -146,9 +215,10 @@ def main():
             assert_width(page)
             if width <= 390:
                 assert page.locator("#navigation").evaluate("nav => nav.scrollWidth <= nav.clientWidth")
-            for name in ("Документы", "AI Study", "История", "Настройки", "Обзор"):
+            for name in SECTIONS:
                 page.locator("#navigation").get_by_text(name, exact=True).click()
                 expect(page.get_by_role("heading", name=name, exact=True, level=1)).to_be_visible()
+                assert_neutral_text(page)
                 assert_width(page)
             if args.screenshots and width in (1440, 390):
                 page.screenshot(path=args.screenshots / f"dashboard-light-{width}.png", full_page=True)
@@ -170,8 +240,9 @@ def main():
         page.unroute("**/api/quota")
         page.get_by_role("button", name="Повторить", exact=True).click()
         expect(page.get_by_role("heading", name="История", exact=True)).to_be_visible()
+        check_configured_generation(browser, args.url)
         browser.close()
-    print("Chromium: PDF, parsing error, Mock generation, quiz and retry, cards, history, deletion, theme, network recovery and 4 widths passed.")
+    print("Chromium: PDF, generation, cache, privacy notice, neutral labels and errors, quiz, cards, history, theme and 4 widths passed.")
 
 
 if __name__ == "__main__":

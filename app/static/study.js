@@ -1,17 +1,16 @@
 import {answerLetter, shuffleQuestion} from './quiz.mjs';
-import {badge, button, el, glyphBox, icon, modeBadge, number, progress, types} from './ui.js';
+import {badge, button, el, glyphBox, icon, number, progress, types} from './ui.js';
 
-export function materialView(generation, cached = false) {
+export function materialView(generation) {
   const {material_type: kind, result} = generation;
   const type = types[kind];
   const body = el('div', {class: 'material-body'});
   const panel = el('article', {class: 'panel material', tabindex: '-1'},
     el('header', {class: 'material-head'},
-      el('div', {class: 'metadata'}, glyphBox(type.icon, type.color), badge(type.label),
-        modeBadge(generation.provider, generation.model_used), cached && badge('Из истории')),
+      el('div', {class: 'metadata'}, glyphBox(type.icon, type.color), badge(type.label)),
       el('h2', {}, result.title),
       el('p', {class: 'muted'}, `Страницы ${generation.page_from}–${generation.page_to}`),
-      generation.provider === 'gemini' && el('p', {class: 'muted'}, geminiUsage(generation))
+      generation.provider === 'gemini' && el('p', {class: 'muted'}, usageLabel(generation))
     ), body);
   if (kind === 'summary') {
     if (result.main_topics?.length) {
@@ -29,8 +28,8 @@ export function materialView(generation, cached = false) {
   return panel;
 }
 
-function geminiUsage(generation) {
-  if (generation.prompt_tokens == null) return 'AI-провайдер не передал данные о токенах.';
+function usageLabel(generation) {
+  if (generation.prompt_tokens == null) return 'Данные о токенах недоступны.';
   const total = `${number(generation.tokens_used)} токенов`;
   return generation.cost_usd == null ? total : `${total} · оценка $${generation.cost_usd.toFixed(6)}`;
 }

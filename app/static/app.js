@@ -1,13 +1,13 @@
 import {request, uploadPdf} from './api.js';
 import {materialView} from './study.js';
 import {badge, button, dateLabel, el, empty, errorBox, fileSize, glyphBox, icon, link,
-  modeBadge, number, openDialog, progress, toast, types} from './ui.js';
+  number, openDialog, progress, toast, types} from './ui.js';
 
 const main = document.querySelector('#main');
 const sections = {
   dashboard: ['Обзор', 'layout-dashboard'],
   documents: ['Документы', 'files'],
-  study: ['AI Study', 'sparkles'],
+  study: ['Генерация', 'sparkles'],
   history: ['История', 'history'],
   settings: ['Настройки', 'settings-2']
 };
@@ -88,9 +88,10 @@ function renderChrome() {
     el('a', {href: `#${key}`, 'aria-current': current === key ? 'page' : null}, icon(glyph), label)
   ));
   document.querySelector('#crumb').textContent = sections[current][0];
-  document.querySelector('#mode').replaceChildren(
-    ...(state.settings ? [modeBadge(state.settings.provider, state.settings.model_used)] : [])
-  );
+  const mode = document.querySelector('#mode');
+  const demo = state.settings?.provider === 'mock';
+  mode.hidden = !demo;
+  mode.replaceChildren(...(demo ? [badge('Демо-режим', 'mock')] : []));
   const quota = document.querySelector('#quota');
   if (state.quota) {
     const {used, limit} = state.quota;
@@ -141,7 +142,7 @@ function dashboard() {
         el('div', {class: 'hero-kicker'}, icon('sparkles'), 'УЧЕБНАЯ МАСТЕРСКАЯ'),
         el('h2', {}, 'Рады вас видеть.'),
         el('p', {}, 'Загрузите лекцию и соберите из неё конспект, карточки или тест для самопроверки.'),
-        link('Открыть AI Study', 'primary', '#study', 'arrow-right')),
+        link('Перейти к генерации', 'primary', '#study', 'arrow-right')),
       el('div', {class: 'hero-art', 'aria-hidden': 'true'},
         el('div', {class: 'orbit orbit-outer'}), el('div', {class: 'orbit orbit-inner'}),
         el('div', {class: 'art-glow'}),
@@ -162,7 +163,7 @@ function dashboard() {
     panel('Недавние материалы', 'Результаты из вашей истории генераций.',
       link('История', 'quiet', '#history', 'history'),
       state.history.length ? el('div', {class: 'rows'}, state.history.slice(0, 4).map(generationRow))
-        : empty('sparkles', 'Материалов пока нет', 'Создайте конспект, карточки или тест в AI Study.'))
+        : empty('sparkles', 'Материалов пока нет', 'Создайте конспект, карточки или тест в разделе «Генерация».'))
   );
 }
 
@@ -297,7 +298,7 @@ async function showDocument(doc) {
           el('p', {class: 'muted'}, `${detail.page_count} стр. · ${fileSize(detail.size)} · ${dateLabel(detail.created_at)}`))),
       el('div', {class: 'action-row'},
         button('Удалить', 'danger', () => confirmDelete(detail), 'trash-2'),
-        button('Использовать в AI Study', 'primary', () => {
+        button('Создать учебный материал', 'primary', () => {
           dialog.close();
           state.draft = {id: detail.id, kind: 'summary', from: '1', to: String(Math.min(detail.page_count, state.settings.max_pages_per_generation))};
           state.activeMaterial = null;
@@ -322,7 +323,7 @@ function confirmDelete(doc) {
       await request(`/documents/${doc.id}`, {method: 'DELETE'});
       state.documents = state.documents.filter(item => item.id !== doc.id);
       state.history = state.history.filter(item => item.document_id !== doc.id);
-      if (state.activeMaterial?.item.document_id === doc.id) state.activeMaterial = null;
+      if (state.activeMaterial?.document_id === doc.id) state.activeMaterial = null;
       if (state.draft?.id === doc.id) state.draft = null;
       dialog.close();
       toast('Документ удалён.');
@@ -344,7 +345,7 @@ function generationRow(item) {
   const doc = state.documents.find(entry => entry.id === item.document_id);
   return el('div', {class: 'entry'},
     button(null, 'entry-main', () => {
-      state.activeMaterial = {item, cached: false};
+      state.activeMaterial = item;
       state.studyError = '';
       go('study');
       requestAnimationFrame(() => main.querySelector('.material')?.focus());
@@ -352,7 +353,7 @@ function generationRow(item) {
     glyphBox(type.icon, type.color),
     el('div', {class: 'entry-label'}, el('strong', {}, item.result.title),
       el('small', {}, `${type.label} · ${doc?.filename || 'PDF'} · ${dateLabel(item.created_at)}`)),
-    el('span', {class: 'entry-end'}, modeBadge(item.provider, item.model_used), icon('chevron-right'))
+    el('span', {class: 'entry-end'}, icon('chevron-right'))
   );
 }
 
@@ -360,22 +361,21 @@ function history() {
   return el('div', {class: 'page'}, pageTitle('История', 'Сохранённые конспекты, карточки и тесты.'),
     panel('Все материалы', `Сохранено: ${number(state.history.length)}`, null,
       state.history.length ? el('div', {class: 'rows'}, state.history.map(generationRow))
-        : empty('history', 'История пока пуста', 'Завершённые генерации появятся здесь.', link('Открыть AI Study', 'primary', '#study', 'sparkles'))));
+        : empty('history', 'История пока пуста', 'Завершённые генерации появятся здесь.', link('Перейти к генерации', 'primary', '#study', 'sparkles'))));
 }
 
 function modeDescription() {
-  if (state.settings.provider === 'gemini') return 'Для генерации текст выбранных страниц (до 24 000 символов) передаётся Google, стороннему AI-провайдеру. Обработка регулируется условиями и политикой конфиденциальности провайдера; запросы могут быть платными.';
-  if (state.settings.provider === 'openai') return 'Для генерации текст выбранных страниц (до 24 000 символов) передаётся OpenAI, стороннему AI-провайдеру. Обработка регулируется условиями и политикой конфиденциальности провайдера; запросы могут быть платными.';
+  if (state.settings.provider !== 'mock') {
+    return 'Для создания материалов текст выбранных страниц (до 24 000 символов) передаётся внешнему сервису. Обработка текста регулируется условиями и политикой конфиденциальности этого сервиса. Запросы могут быть платными.';
+  }
+  const demo = 'В демо-режиме материалы собираются локально по шаблонам, без отправки текста.';
   if (state.settings.fallback_reason === 'missing_api_key') {
-    return 'Для AI-провайдера не задан ключ. Доступен Mock Mode: материалы собираются локально по шаблонам.';
+    return `На сервере не задан ключ для генерации. ${demo}`;
   }
-  if (['invalid_budget', 'invalid_model'].includes(state.settings.fallback_reason)) {
-    return 'Проверьте модель, тарифы и лимиты AI-провайдера в конфигурации сервера. Сейчас активен Mock Mode.';
+  if (state.settings.fallback_reason) {
+    return `Проверьте настройки генерации на сервере. ${demo}`;
   }
-  if (state.settings.fallback_reason === 'unsupported_provider') {
-    return 'Сервер не распознал выбранного провайдера. Доступен Mock Mode.';
-  }
-  return 'Демонстрационный режим. Материалы собираются по шаблонам из текста PDF без вызовов AI.';
+  return demo;
 }
 
 function settings() {
@@ -391,8 +391,7 @@ function settings() {
   return el('div', {class: 'page settings-page'},
     pageTitle('Настройки', 'Тема интерфейса и параметры сервера.'),
     panel('Внешний вид', 'Тема сохраняется в этом браузере.', null, themeOptions),
-    panel('Режим генерации', modeDescription(), modeBadge(state.settings.provider, state.settings.model_used),
-      el('p', {class: 'muted'}, 'Провайдер и ключ настраиваются в файле .env на сервере.')),
+    panel('Режим генерации', modeDescription()),
     panel('Лимиты', null, button('Обновить квоту', 'quiet', refreshQuota, 'rotate-ccw'),
       el('dl', {class: 'limits'},
         el('div', {}, el('dt', {}, 'Размер PDF'), el('dd', {}, fileSize(max_upload_bytes))),
@@ -402,14 +401,13 @@ function settings() {
 }
 
 function study() {
-  const intro = pageTitle('AI Study', 'Соберите учебный материал из выбранных страниц PDF.');
-  const modeNote = el('div', {class: 'notice'}, icon('info'), el('span', {}, modeDescription()));
+  const intro = pageTitle('Генерация', 'Соберите учебный материал из выбранных страниц PDF.');
   const form = state.documents.length ? studyForm() : empty('sparkles', 'Добавьте PDF', 'Для генерации нужен документ с извлечённым текстом.',
     link('Перейти к документам', 'primary', '#documents', 'files'));
-  const right = state.activeMaterial ? materialView(state.activeMaterial.item, state.activeMaterial.cached)
+  const right = state.activeMaterial ? materialView(state.activeMaterial)
     : panel('Результат', null, null, empty('book-open', 'Здесь появится материал',
       'Выберите документ, диапазон страниц и формат, затем запустите генерацию.'));
-  return el('div', {class: 'page'}, intro, modeNote,
+  return el('div', {class: 'page'}, intro,
     el('div', {class: 'study-grid'}, panel('Новый материал', null, null, form), right));
 }
 
@@ -470,6 +468,23 @@ function studyForm() {
     icon('sparkles'), state.job ? 'Генерация…' : 'Сгенерировать'));
 }
 
+const generationErrors = new Map([
+  ['Selected pages contain no text', 'На выбранных страницах нет текста. Выберите другой диапазон.'],
+  ['На выбранных страницах недостаточно текста для генерации.', 'На выбранных страницах недостаточно текста. Выберите другой диапазон.'],
+  ['Weekly AI token limit exceeded', 'Исчерпана недельная квота.'],
+  ['Исчерпан дневной лимит запросов AI-провайдера.', 'Исчерпан дневной лимит генерации.'],
+  ['Недостаточно дневного бюджета AI-провайдера для этого запроса.', 'Недостаточно дневного бюджета для этого запроса.']
+]);
+
+function generationError(job) {
+  const known = generationErrors.get(job.error);
+  if (known) return known;
+  if (job.error_status === 409) return 'Режим генерации изменился. Отправьте запрос повторно.';
+  if (job.error_status === 422) return 'Не удалось создать материал. Попробуйте другой диапазон страниц.';
+  if (job.error_status === 429) return 'Генерация временно ограничена. Попробуйте позже.';
+  return 'Не удалось создать материал. Попробуйте ещё раз.';
+}
+
 async function generate(payload) {
   if (state.job) return;
   state.studyError = '';
@@ -485,7 +500,7 @@ async function generate(payload) {
     const jobId = job.job_id;
     const deadline = Date.now() + 180_000;
     while (!job.generation && Date.now() < deadline) {
-      if (job.status === 'error') throw new Error(job.error || 'Генерация завершилась ошибкой.');
+      if (job.status === 'error') throw new Error(generationError(job));
       if (job.status === 'done') throw new Error('Генерация завершилась без результата.');
       update(job.status === 'running' ? 'Готовим материал…' : 'Запрос принят. Ожидаем выполнения…');
       await new Promise(resolve => setTimeout(resolve, 850));
@@ -493,7 +508,7 @@ async function generate(payload) {
     }
     if (!job.generation) throw new Error('Ответ задерживается. Повторная отправка подключится к той же задаче.');
     const item = job.generation;
-    state.activeMaterial = {item, cached};
+    state.activeMaterial = item;
     if (!state.history.some(entry => entry.id === item.id)) state.history.unshift(item);
     toast(cached ? 'Открыт сохранённый материал.' : 'Учебный материал готов.');
   } catch (error) {

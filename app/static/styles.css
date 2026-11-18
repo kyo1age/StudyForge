@@ -261,7 +261,6 @@ dialog::backdrop { background: #080610ae; }
   .metric span:not(.glyph) { font-size: 10px; min-height: 28px; }
   .metric strong { font-size: 18px; }
   .panel { padding: 13px; }
-  .entry-end .badge { display: none; }
   .icon-button, .dropzone .btn, #navigation a { min-height: 44px; }
 }
 @media (prefers-reduced-motion: reduce) {
